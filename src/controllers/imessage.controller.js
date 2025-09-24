@@ -1,27 +1,51 @@
-const { exec } = require("child_process");
-const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
-const { createClient } = require("@supabase/supabase-js");
-const httpStatus = require("http-status");
-const catchAsync = require("../utils/catchAsync");
+const { exec } = require('child_process');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+const httpStatus = require('http-status');
+const catchAsync = require('../utils/catchAsync');
+const fs = require('fs');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
-const dbPath = path.join(process.env.HOME || process.env.USERPROFILE, "Library", "Messages", "chat.db");
+const dbPath = path.join(process.env.HOME || process.env.USERPROFILE, 'Library', 'Messages', 'chat.db');
 
 // -----------------------------------------------------
 // 1. SEND MESSAGE
 // -----------------------------------------------------
 const sendMessage = catchAsync(async (req, res) => {
-  const { icloudId, message } = req.body;
+  const { icloudId, message, attachmentPath } = req.body;
 
-  const safeMessage = message.replace(/"/g, '\\"');
+  // Sanitize inputs
   const safeIcloudId = icloudId.replace(/"/g, '\\"');
+  const safeMessage = message ? message.replace(/"/g, '\\"') : null;
 
-  const appleScript = `
+  let appleScript = `
     tell application "Messages"
       set targetService to 1st service whose service type = iMessage
       set targetBuddy to buddy "${safeIcloudId}" of targetService
+  `;
+
+  // Add message if provided
+  if (safeMessage) {
+    appleScript += `
       send "${safeMessage}" to targetBuddy
+    `;
+  }
+
+  // Add attachment if provided
+  if (attachmentPath) {
+    const fullPath = path.resolve(attachmentPath);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(httpStatus.BAD_REQUEST).json({ error: 'Attachment file does not exist' });
+    }
+
+    appleScript += `
+    set theFile to POSIX file "${fullPath}" as alias
+    send theFile to targetBuddy
+  `;
+  }
+
+  appleScript += `
     end tell
   `;
 
@@ -29,10 +53,9 @@ const sendMessage = catchAsync(async (req, res) => {
     if (error) {
       return res.status(httpStatus.BAD_REQUEST).json({ error: error.message });
     }
-    res.status(httpStatus.OK).json({ message: "Message sent successfully" });
+    res.status(httpStatus.OK).json({ message: 'Message (and attachment if any) sent successfully' });
   });
 });
-
 // -----------------------------------------------------
 // 2. LIST CONVERSATIONS
 // -----------------------------------------------------
@@ -125,25 +148,24 @@ async function fetchAndSaveMessages() {
 
     db.all(query, async (err, rows) => {
       if (err) return reject(err);
-
       const saved = [];
       for (const row of rows) {
         if (row.is_from_me === 1) continue; // ✅ only received messages
 
         // Deduplicate by message_id
         const { data: existing } = await supabase
-          .from("imessages")
-          .select("message_id")
-          .eq("message_id", row.message_id)
+          .from('imessages')
+          .select('message_id')
+          .eq('message_id', row.message_id)
           .maybeSingle();
 
         if (!existing) {
-          const { error: dbError } = await supabase.from("imessages").insert({
+          const { error: dbError } = await supabase.from('imessages').insert({
             message_id: row.message_id.toString(),
             message_text: row.text,
             sender_handle: row.sender_handle,
             received_date: row.received_date,
-            created_at: new Date()
+            created_at: new Date(),
           });
 
           if (!dbError) saved.push(row);
@@ -159,7 +181,7 @@ const receiveMessages = catchAsync(async (req, res) => {
   try {
     const savedMessages = await fetchAndSaveMessages();
     res.status(httpStatus.OK).json({
-      message: "Messages synced successfully",
+      message: 'Messages synced successfully',
       count: savedMessages.length,
       messages: savedMessages,
     });
@@ -176,7 +198,7 @@ setInterval(async () => {
       console.log(`[iMessage Sync] Saved ${msgs.length} new messages.`);
     }
   } catch (err) {
-    console.error("[iMessage Sync Error]", err.message);
+    console.error('[iMessage Sync Error]', err.message);
   }
 }, 5000);
 

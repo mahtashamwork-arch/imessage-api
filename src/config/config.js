@@ -13,10 +13,6 @@ const envVarsSchema = Joi.object()
     DB_PASSWORD: Joi.string().required().description('PostgreSQL password'),
     DB_HOST: Joi.string().required().description('PostgreSQL host'),
     DB_PORT: Joi.number().default(5432).description('PostgreSQL port'),
-    TWILIO_ACCOUNT_SID: Joi.string().required().description('Twilio account SID'),
-    TWILIO_AUTH_TOKEN: Joi.string().required().description('Twilio auth token'),
-    SEND_GRID_FROM_EMAIL: Joi.string().required().description("Sendgrid 'from' email required"),
-    SENDGRID_API_KEY: Joi.string().required().description('Sendgrid api key required'),
   })
   .unknown();
 
@@ -37,18 +33,7 @@ const config = {
     port: envVars.DB_PORT,
     dialect: 'postgres',
   },
-  twilio: {
-    twilioAccountSid: envVars.TWILIO_ACCOUNT_SID,
-    twilioAuthToken: envVars.TWILIO_AUTH_TOKEN,
-    twilioCountryCode: envVars.TWILIO_COUNTRY_CODE,
-    twilioWhatsappNumber: envVars.TWILIO_WHATSAPP_NUMBER,
-    twilioPhoneNumber: envVars.TWILIO_PHONE_NUMBER,
-  },
-  email: {
-    sendGridApiKey: envVars.SENDGRID_API_KEY,
-    from: envVars.SEND_GRID_FROM_EMAIL,
-    otpVerificationTemplateId: envVars.SEND_GRID_VERIFICATION_TEMPLATE,
-  },
+
 };
 
 module.exports = config;
